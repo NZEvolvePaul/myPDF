@@ -15,6 +15,8 @@ export interface Field {
   h: number;
   /** Text for date/text fields; a PNG data URL for signature/initials. */
   value: string;
+  /** For send-for-signature: which signer fills this field. */
+  recipientId?: string;
 }
 
 export interface PageSize {

@@ -2,8 +2,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+  resolve: {
+    alias: { '@shared': fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)) },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -25,5 +29,5 @@ export default defineConfig({
       },
     }),
   ],
-  test: { environment: 'node' },
+  test: { environment: 'node', include: ['src/**/*.test.ts', 'supabase/functions/_shared/**/*.test.ts'] },
 });

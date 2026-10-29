@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
-import type { Field } from '../types';
+import type { Field } from './types.ts';
 
 const INK = rgb(0.05, 0.1, 0.35);
 
@@ -35,7 +35,7 @@ export function toPdfRect(
 }
 
 /** Stamps the fields onto the original PDF and returns the new file's bytes. */
-export async function exportSignedPdf(original: Uint8Array, fields: Field[]): Promise<Uint8Array> {
+export async function stampFields(original: Uint8Array, fields: Field[]): Promise<Uint8Array> {
   const doc = await PDFDocument.load(original, { ignoreEncryption: true });
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const pages = doc.getPages();

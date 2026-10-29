@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy } from '../pdf/pdfjs';
-import type { Field, PageSize } from '../types';
+import type { Field, PageSize } from '@shared/types.ts';
+
+export interface FieldLook {
+  /** Shown inside an empty field, e.g. "Sign here" or a signer's name. */
+  label?: string;
+  color?: string;
+  /** Highlight fields the viewer still has to fill. */
+  attention?: boolean;
+}
 
 interface Props {
   doc: PDFDocumentProxy;
@@ -14,12 +22,37 @@ interface Props {
   onChange: (field: Field) => void;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
+  /** Whether a field can be moved, resized and removed. Defaults to all. */
+  movable?: (f: Field) => boolean;
+  /** Whether a date/text field's value can be typed. Defaults to all. */
+  typable?: (f: Field) => boolean;
+  /** Clicked a field that isn't movable (e.g. a signer tapping "Sign here"). */
+  onActivate?: (f: Field) => void;
+  look?: (f: Field) => FieldLook;
 }
 
 const MIN = 0.01;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const always = () => true;
+const plain = (): FieldLook => ({});
 
-export function PdfPage({ doc, index, size, scale, fields, selectedId, placing, onPlace, onChange, onSelect, onDelete }: Props) {
+export function PdfPage({
+  doc,
+  index,
+  size,
+  scale,
+  fields,
+  selectedId,
+  placing,
+  onPlace,
+  onChange,
+  onSelect,
+  onDelete,
+  movable = always,
+  typable = always,
+  onActivate,
+  look = plain,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -69,6 +102,11 @@ export function PdfPage({ doc, index, size, scale, fields, selectedId, placing, 
   /** Drag to move (handle = 'move') or resize from the bottom-right corner. */
   const startDrag = (e: React.PointerEvent, field: Field, handle: 'move' | 'resize') => {
     if ((e.target as HTMLElement).tagName === 'INPUT' && handle === 'move') return;
+    if (!movable(field)) {
+      e.stopPropagation();
+      onActivate?.(field);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     onSelect(field.id);
@@ -105,45 +143,68 @@ export function PdfPage({ doc, index, size, scale, fields, selectedId, placing, 
       aria-label={`Page ${index + 1}`}
     >
       <canvas ref={canvasRef} className="page-canvas" style={{ width, height }} />
-      {fields.map((f) => (
-        <div
-          key={f.id}
-          className={`field field-${f.kind} ${f.id === selectedId ? 'selected' : ''}`}
-          style={{ left: f.x * width, top: f.y * height, width: f.w * width, height: f.h * height }}
-          onPointerDown={(e) => startDrag(e, f, 'move')}
-        >
-          {f.kind === 'signature' || f.kind === 'initials' ? (
-            <img src={f.value} alt={f.kind} draggable={false} />
-          ) : (
-            <input
-              value={f.value}
-              autoFocus={f.id === selectedId && f.kind === 'text' && !f.value}
-              style={{ fontSize: f.h * height * 0.7 }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                onSelect(f.id);
-              }}
-              onChange={(e) => onChange({ ...f, value: e.target.value })}
-            />
-          )}
-          {f.id === selectedId && (
-            <>
-              <button
-                className="field-delete"
-                aria-label="Remove"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
+      {fields.map((f) => {
+        const l = look(f);
+        const canMove = movable(f);
+        const isImage = f.kind === 'signature' || f.kind === 'initials';
+        return (
+          <div
+            key={f.id}
+            className={`field field-${f.kind} ${f.id === selectedId ? 'selected' : ''} ${canMove ? '' : 'fixed'} ${
+              l.attention ? 'attention' : ''
+            } ${onActivate && !canMove ? 'clickable' : ''}`}
+            style={{
+              left: f.x * width,
+              top: f.y * height,
+              width: f.w * width,
+              height: f.h * height,
+              ...(l.color ? { borderColor: l.color, background: `${l.color}1f` } : {}),
+            }}
+            onPointerDown={(e) => startDrag(e, f, 'move')}
+          >
+            {isImage && f.value ? (
+              <img src={f.value} alt={f.kind} draggable={false} />
+            ) : !isImage && typable(f) ? (
+              <input
+                value={f.value}
+                placeholder={l.label}
+                aria-label={l.label ?? f.kind}
+                style={{ fontSize: f.h * height * 0.7 }}
+                autoFocus={canMove && f.id === selectedId && f.kind === 'text' && !f.value}
+                onPointerDown={(e) => {
                   e.stopPropagation();
-                  onDelete(f.id);
+                  onSelect(f.id);
                 }}
-              >
-                ×
-              </button>
-              <span className="field-resize" onPointerDown={(e) => startDrag(e, f, 'resize')} />
-            </>
-          )}
-        </div>
-      ))}
+                onChange={(e) => onChange({ ...f, value: e.target.value })}
+              />
+            ) : f.value ? (
+              <span className="field-text-value" style={{ fontSize: f.h * height * 0.7 }}>
+                {f.value}
+              </span>
+            ) : (
+              <span className="field-label" style={l.color ? { color: l.color } : undefined}>
+                {l.label ?? f.kind}
+              </span>
+            )}
+            {canMove && f.id === selectedId && (
+              <>
+                <button
+                  className="field-delete"
+                  aria-label="Remove"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(f.id);
+                  }}
+                >
+                  ×
+                </button>
+                <span className="field-resize" onPointerDown={(e) => startDrag(e, f, 'resize')} />
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

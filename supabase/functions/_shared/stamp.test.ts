@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, degrees } from 'pdf-lib';
-import { exportSignedPdf, toPdfRect } from './exportPdf';
+import { stampFields, toPdfRect } from './stamp.ts';
 
 const box = { x: 0, y: 0, width: 600, height: 800 };
 const f = { x: 0.1, y: 0.2, w: 0.3, h: 0.05 };
@@ -26,14 +26,14 @@ describe('toPdfRect', () => {
   });
 });
 
-describe('exportSignedPdf', () => {
+describe('stampFields', () => {
   it('writes text and keeps the page count', async () => {
     const src = await PDFDocument.create();
     src.addPage([600, 800]);
     src.addPage([600, 800]).setRotation(degrees(90));
     const bytes = await src.save();
 
-    const out = await exportSignedPdf(bytes, [
+    const out = await stampFields(bytes, [
       { id: 'a', kind: 'text', page: 0, ...f, value: 'Paul' },
       { id: 'b', kind: 'date', page: 1, ...f, value: '2026-10-29' },
     ]);
